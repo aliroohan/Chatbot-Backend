@@ -34,18 +34,14 @@ const adminSchema = new mongoose.Schema({
             default: null
         }
     },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
     status: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],
         default: 'pending'
-    },
-    approvalToken: {
-        type: String,
-        default: null
-    },
-    rejectToken: {
-        type: String,
-        default: null
     }
 }, {
     timestamps: true

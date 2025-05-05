@@ -25,8 +25,6 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: 'User with this email or username already exists' });
         }
 
-        const approvalToken = jwt.sign(username, process.env.JWT_SECRET);
-        const rejectionToken = jwt.sign(username, process.env.JWT_SECRET);
 
         const otp = generateOTP();
 
@@ -39,19 +37,19 @@ exports.registerUser = async (req, res) => {
             email,
             password,
             isVerified: false,
-            approvalToken,
-            rejectionToken,
             otp: {
                 code: otp,
                 expiresAt
             }
         });
 
+        await user.save();
+
 
 
         if (user) {
             const emailSent = await sendOtpEmail(email, otp);
-            const approvalMail = await sendApprovalEmail(email, username, approvalToken, rejectionToken);
+            const approvalMail = await sendApprovalEmail(email, username, user._id, user._id);
             if (!emailSent) {
                 return res.status(201).json({
                     _id: user._id,
@@ -332,8 +330,10 @@ exports.verifyOtp = async (req, res) => {
             expiresAt: null
         };
 
-        await user.save();
+        user.isVerified = true
 
+        await user.save();
+        console.log('')
         res.status(200).json({
             message: 'OTP verified successfully',
             user: {
@@ -448,7 +448,7 @@ exports.approveEmail = async (req, res) => {
         }
 
         // Find user by token
-        const user = await User.findOne({ approvalToken: token });
+        const user = await User.findOne({ _id: token });
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -476,7 +476,7 @@ exports.rejectEmail = async (req, res) => {
         }
 
         // Find user by token
-        const user = await User.findOne({ rejectToken: token });
+        const user = await User.findOne({ _id: token });
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
