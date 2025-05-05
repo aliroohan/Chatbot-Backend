@@ -6,8 +6,10 @@ const {
     generateOtp,
     verifyOtp,
     forgotPassword,
-    resetPassword
-} = require('../controllers/userController');
+    resetPassword,
+    approveEmail,
+    rejectEmail
+} = require('../controllers/adminController');
 
 
 router.post('/register', registerUser);
@@ -16,6 +18,6 @@ router.post('/generate-otp', generateOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
-
-
+router.post('/approve/:token', approveEmail);
+router.post('/reject/:token', rejectEmail);
 module.exports = router;

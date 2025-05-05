@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const environment = require('dotenv');
 const cors = require('cors');
 const dbConfig = require('./config/dbConfig');
-const userRoutes = require('./routes/userRoute');
+const adminRoutes = require('./routes/adminRoute');
 
 const app = express();
 
@@ -16,7 +16,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 
-app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 app.listen(process.env.PORT, () => {

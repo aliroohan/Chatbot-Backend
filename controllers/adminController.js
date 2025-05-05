@@ -1,6 +1,6 @@
-const User = require('../models/user');
+const User = require('../models/admin');
 const jwt = require('jsonwebtoken');
-const { sendOtpEmail } = require('../utils/emailService');
+const { sendOtpEmail, sendApprovalEmail, sendUserStatusEmail} = require('../utils/emailService');
 
 const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -25,6 +25,9 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: 'User with this email or username already exists' });
         }
 
+        const approvalToken = jwt.sign(username);
+        const rejectionToken = jwt.sign(username);
+
         const otp = generateOTP();
 
         const expiresAt = new Date();
@@ -36,15 +39,19 @@ exports.registerUser = async (req, res) => {
             email,
             password,
             isVerified: false,
+            approvalToken,
+            rejectionToken,
             otp: {
                 code: otp,
                 expiresAt
             }
         });
 
+
+
         if (user) {
             const emailSent = await sendOtpEmail(email, otp);
-
+            const approvalMail = await sendApprovalEmail(email, username, approvalToken, rejectionToken);
             if (!emailSent) {
                 return res.status(201).json({
                     _id: user._id,
@@ -103,10 +110,11 @@ exports.verifyEmail = async (req, res) => {
             return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
         }
 
-        // Mark user as verified
+
+
         user.isVerified = true;
 
-        // Clear OTP after successful verification
+
         user.otp = {
             code: null,
             expiresAt: null
@@ -212,6 +220,14 @@ exports.loginUser = async (req, res) => {
                 email: user.email
             });
         }
+        if (user.status === 'pending') {
+            return res.status(400).json({message: 'Account is not approved'});
+        }
+
+        if (user.status === 'rejected') {
+            return res.status(400).json({ message: 'Your account has been rejected. Please contact support for assistance.' });
+        }
+
 
         res.json({
             _id: user._id,
@@ -227,79 +243,6 @@ exports.loginUser = async (req, res) => {
     }
 };
 
-// Get user profile
-exports.getUserProfile = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id).select('-password -otp');
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        res.json(user);
-    } catch (error) {
-        console.error('Get profile error:', error);
-        res.status(500).json({ message: 'Server error while fetching user profile' });
-    }
-};
-
-// Update user profile
-exports.updateUserProfile = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        user.name = req.body.name || user.name;
-        user.username = req.body.username || user.username;
-
-        // If email is being changed, require verification again
-        if (req.body.email && req.body.email !== user.email) {
-            // Check if the new email is already in use
-            const emailExists = await User.findOne({ email: req.body.email });
-            if (emailExists) {
-                return res.status(400).json({ message: 'Email already in use' });
-            }
-
-            user.email = req.body.email;
-            user.isVerified = false;
-
-            // Generate new OTP for email verification
-            const otp = generateOTP();
-            const expiresAt = new Date();
-            expiresAt.setMinutes(expiresAt.getMinutes() + 10);
-
-            user.otp = {
-                code: otp,
-                expiresAt
-            };
-
-            // Send verification email to new email address
-            await sendOtpEmail(req.body.email, otp);
-        }
-
-        if (req.body.password) {
-            user.password = req.body.password;
-        }
-
-        const updatedUser = await user.save();
-
-        res.json({
-            _id: updatedUser._id,
-            name: updatedUser.name,
-            username: updatedUser.username,
-            email: updatedUser.email,
-            isVerified: updatedUser.isVerified,
-            token: generateToken(updatedUser._id),
-            message: updatedUser.isVerified ? 'Profile updated successfully' : 'Profile updated. Please verify your new email address.'
-        });
-    } catch (error) {
-        console.error('Update profile error:', error);
-        res.status(500).json({ message: 'Server error while updating user profile' });
-    }
-};
 
 // Generate and send OTP to user's email
 exports.generateOtp = async (req, res) => {
@@ -483,3 +426,60 @@ exports.resetPassword = async (req, res) => {
         res.status(500).json({ message: 'Server error during password reset' });
     }
 };
+
+
+exports.approveEmail = async (req, res) => {
+    try {
+        const token = req.params.token;
+
+        if (!token) {
+            return res.status(400).json({ message: 'Token is required' });
+        }
+
+        // Find user by token
+        const user = await User.findOne({ approvalToken: token });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Approve user
+        user.status = 'approved'
+        user.approvalToken = null;
+        await user.save();
+        sendUserStatusEmail(user.email, user.username, true);
+        res.status(200).json({ message: 'User is approved successfully' });
+
+    } catch (e) {
+        res.status(500).json({ message: 'Server error during account approval request' });
+    }
+}
+
+
+exports.rejectEmail = async (req, res) => {
+    try {
+        const token = req.params.token;
+
+        if (!token) {
+            return res.status(400).json({ message: 'Token is required' });
+        }
+
+        // Find user by token
+        const user = await User.findOne({ rejectToken: token });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Approve user
+        user.status = 'rejectd'
+        user.approvalToken = null;
+        await user.save();
+        sendUserStatusEmail(user.email, user.username, false);
+        res.status(200).json({ message: 'User is rejected successfully' });
+
+
+    } catch (e) {
+        res.status(500).json({ message: 'Server error during account rejection request' });
+    }
+}

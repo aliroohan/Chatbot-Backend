@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
+const adminSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
@@ -33,12 +33,25 @@ const userSchema = new mongoose.Schema({
             type: Date,
             default: null
         }
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
+    approvalToken: {
+        type: String,
+        default: null
+    },
+    rejectToken: {
+        type: String,
+        default: null
     }
 }, {
     timestamps: true
 });
 
-userSchema.pre('save', async function (next) {
+adminSchema.pre('save', async function (next) {
     const user = this;
     if (user.isModified('password')) {
         user.password = await bcrypt.hash(user.password, 8);
@@ -46,9 +59,9 @@ userSchema.pre('save', async function (next) {
     next();
 });
 
-userSchema.methods.comparePassword = function (password) {
+adminSchema.methods.comparePassword = function (password) {
     const user = this;
     return bcrypt.compare(password, user.password);
 }
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model('Admin', adminSchema);
