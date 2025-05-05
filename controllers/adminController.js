@@ -25,8 +25,8 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: 'User with this email or username already exists' });
         }
 
-        const approvalToken = jwt.sign(username);
-        const rejectionToken = jwt.sign(username);
+        const approvalToken = jwt.sign(username, process.env.JWT_SECRET);
+        const rejectionToken = jwt.sign(username, process.env.JWT_SECRET);
 
         const otp = generateOTP();
 
@@ -60,6 +60,17 @@ exports.registerUser = async (req, res) => {
                     email: user.email,
                     isVerified: false,
                     message: 'Account created but failed to send verification email. Please request a new OTP.'
+                });
+            }
+
+            if (!approvalMail) {
+                return res.status(201).json({
+                    _id: user._id,
+                    name: user.name,
+                    username: user.username,
+                    email: user.email,
+                    isVerified: false,
+                    message: 'Account created but failed to send approval mail.'
                 });
             }
 
