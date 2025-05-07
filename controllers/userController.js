@@ -1,6 +1,6 @@
-const Admin = require('../models/admin');
+const User = require('../models/user');
 const jwt = require('jsonwebtoken');
-const { sendOtpEmail, sendApprovalEmail, sendUserStatusEmail} = require('../utils/emailService');
+const { sendOtpEmail } = require('../utils/emailService');
 
 const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -20,9 +20,9 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: 'Please provide all required fields' });
         }
 
-        const userExists = await Admin.findOne({ $or: [{ email }, { username }] });
+        const userExists = await User.findOne({ $or: [{ email }, { username }] });
         if (userExists) {
-            return res.status(400).json({ message: 'Admin with this email or username already exists' });
+            return res.status(400).json({ message: 'User with this email or username already exists' });
         }
 
 
@@ -31,7 +31,7 @@ exports.registerUser = async (req, res) => {
         const expiresAt = new Date();
         expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-        const user = await Admin.create({
+        const user = await User.create({
             name,
             username,
             email,
@@ -49,7 +49,7 @@ exports.registerUser = async (req, res) => {
 
         if (user) {
             const emailSent = await sendOtpEmail(email, otp);
-            const approvalMail = await sendApprovalEmail(email, username, user._id, user._id);
+
             if (!emailSent) {
                 return res.status(201).json({
                     _id: user._id,
@@ -58,17 +58,6 @@ exports.registerUser = async (req, res) => {
                     email: user.email,
                     isVerified: false,
                     message: 'Account created but failed to send verification email. Please request a new OTP.'
-                });
-            }
-
-            if (!approvalMail) {
-                return res.status(201).json({
-                    _id: user._id,
-                    name: user.name,
-                    username: user.username,
-                    email: user.email,
-                    isVerified: false,
-                    message: 'Account created but failed to send approval mail.'
                 });
             }
 
@@ -98,10 +87,10 @@ exports.verifyEmail = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin not found' });
+            return res.status(404).json({ message: 'User not found' });
         }
 
         // Check if user is already verified
@@ -157,10 +146,10 @@ exports.resendVerificationOtp = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin with this email does not exist' });
+            return res.status(404).json({ message: 'User with this email does not exist' });
         }
 
         // Check if user is already verified
@@ -208,7 +197,7 @@ exports.loginUser = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
             return res.status(401).json({ message: 'Invalid email or password' });
@@ -263,10 +252,10 @@ exports.generateOtp = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin with this email does not exist' });
+            return res.status(404).json({ message: 'User with this email does not exist' });
         }
 
         // Generate OTP
@@ -308,10 +297,10 @@ exports.verifyOtp = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin not found' });
+            return res.status(404).json({ message: 'User not found' });
         }
 
         // Check if OTP exists and is valid
@@ -359,10 +348,10 @@ exports.forgotPassword = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin with this email does not exist' });
+            return res.status(404).json({ message: 'User with this email does not exist' });
         }
 
         // Generate OTP
@@ -404,10 +393,10 @@ exports.resetPassword = async (req, res) => {
         }
 
         // Find user by email
-        const user = await Admin.findOne({ email });
+        const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).json({ message: 'Admin not found' });
+            return res.status(404).json({ message: 'User not found' });
         }
 
         // Check if OTP exists and is valid
@@ -438,59 +427,3 @@ exports.resetPassword = async (req, res) => {
     }
 };
 
-
-exports.approveEmail = async (req, res) => {
-    try {
-        const token = req.params.token;
-
-        if (!token) {
-            return res.status(400).json({ message: 'Token is required' });
-        }
-
-        // Find user by token
-        const user = await Admin.findOne({ _id: token });
-
-        if (!user) {
-            return res.status(404).json({ message: 'Admin not found' });
-        }
-
-        // Approve user
-        user.status = 'approved'
-        user.approvalToken = null;
-        await user.save();
-        sendUserStatusEmail(user.email, user.username, true);
-        res.status(200).json({ message: 'Admin is approved successfully' });
-
-    } catch (e) {
-        res.status(500).json({ message: 'Server error during account approval request' });
-    }
-}
-
-
-exports.rejectEmail = async (req, res) => {
-    try {
-        const token = req.params.token;
-
-        if (!token) {
-            return res.status(400).json({ message: 'Token is required' });
-        }
-
-        // Find user by token
-        const user = await Admin.findOne({ _id: token });
-
-        if (!user) {
-            return res.status(404).json({ message: 'Admin not found' });
-        }
-
-        // Approve user
-        user.status = 'rejectd'
-        user.approvalToken = null;
-        await user.save();
-        sendUserStatusEmail(user.email, user.username, false);
-        res.status(200).json({ message: 'Admin is rejected successfully' });
-
-
-    } catch (e) {
-        res.status(500).json({ message: 'Server error during account rejection request' });
-    }
-}
