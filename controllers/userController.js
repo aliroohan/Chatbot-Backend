@@ -218,13 +218,7 @@ exports.loginUser = async (req, res) => {
                 email: user.email
             });
         }
-        if (user.status === 'pending') {
-            return res.status(400).json({message: 'Account is not approved'});
-        }
 
-        if (user.status === 'rejected') {
-            return res.status(400).json({ message: 'Your account has been rejected. Please contact support for assistance.' });
-        }
 
 
         res.json({

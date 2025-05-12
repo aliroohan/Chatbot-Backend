@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { protect } = require('../middleware/authMiddleware'); // Assuming you have auth middleware
+
 
 
 router.post('/register', userController.registerUser);
