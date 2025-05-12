@@ -7,11 +7,8 @@ const socketIo = require('socket.io');
 const dbConfig = require('./config/dbConfig');
 const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
-const chatRoutes = require('./routes/chatRoutes');
-const { saveMessage } = require('./controllers/chatController');
 const { processLLMRequest } = require('./utils/llmService');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,14 +29,13 @@ app.use(bodyParser.json());
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/chat', chatRoutes);
 
 // Server-side code
 io.use((socket, next) => {
     try {
         // Check for token in handshake query or headers
         const token = socket.handshake.query.token ||
-                      socket.handshake.headers.authorization;
+            socket.handshake.headers.authorization;
 
         if (!token) {
             socket.user = { id: 'anonymous' };
@@ -65,14 +61,15 @@ io.use((socket, next) => {
         return next(new Error('Authentication error'));
     }
 });
+
 // Socket.IO events
 io.on('connection', (socket) => {
     console.log('New client connected: ' + socket.id);
-    
+
     // Handle user message
     socket.on('message', async (data) => {
         try {
-            const { content, chatId } = JSON.parse(data);
+            const { content } = JSON.parse(data);
             console.log('Received message:', data);
 
             // Validate content exists
@@ -82,33 +79,19 @@ io.on('connection', (socket) => {
             }
 
             const userId = socket.user.id;
-            
-            // If no chatId is provided, create a new one
-            const activeChatId = chatId || uuidv4();
-            
-            // Save user message to database
+
+            // Create message object
             const userMessage = {
                 role: 'user',
                 content,
                 timestamp: new Date()
             };
-            console.log(userId)
-            await saveMessage(userId, activeChatId, userMessage);
-            
-            // Get chat history
-            const Chat = require('./models/chat');
-            const chatHistory = await Chat.findOne({ userId, chatId: activeChatId });
-            const messages = chatHistory ? chatHistory.messages : [];
-            
-            // Process with LLM service
-            const llmResponse = await processLLMRequest(messages);
-            
-            // Save LLM response to database
-            await saveMessage(userId, activeChatId, llmResponse);
-            
+
+            // Process with LLM service - passing just the current message
+            const llmResponse = await processLLMRequest([userMessage]);
+
             // Send response back to client
-            socket.emit('llm-response',  JSON.stringify({
-                chatId: activeChatId,
+            socket.emit('llm-response', JSON.stringify({
                 message: llmResponse
             }));
         } catch (error) {
@@ -116,14 +99,7 @@ io.on('connection', (socket) => {
             socket.emit('error', { message: 'Failed to process message' });
         }
     });
-    
-    // Join a specific chat room
-    socket.on('join-chat', (chatId) => {
-        // Optional: You can implement room joining for multi-user chats
-        socket.join(chatId);
-        console.log(`User ${socket.user.id} joined chat: ${chatId}`);
-    });
-    
+
     socket.on('disconnect', () => {
         console.log('Client disconnected: ' + socket.id);
     });
